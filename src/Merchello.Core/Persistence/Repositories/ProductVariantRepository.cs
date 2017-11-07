@@ -202,8 +202,16 @@
             BulkInsertRecordsWithKey<ProductVariantDto>(dtos);
             BulkInsertRecordsWithKey<ProductVariantIndexDto>(dtos.Select(v => v.ProductVariantIndexDto));
 
-            // We have to look up the examine ids
-            var idDtos = Database.Fetch<ProductVariantIndexDto>("WHERE productVariantKey IN (@pvkeys)", new { @pvkeys = dtos.Select(x => x.Key) });
+            // We have to look up the examine ids but avoid the 2100 param limit
+            var keyChunks = dtos.Select(x => x.Key).ToArray().Split(2000);
+
+            var idDtos = new List<ProductVariantIndexDto>();
+
+            foreach (var keyChunk in keyChunks)
+            {
+                idDtos.AddRange(Database.Fetch<ProductVariantIndexDto>("WHERE productVariantKey IN (@pvkeys)",
+                    new {@pvkeys = keyChunk }));
+            }
 
             foreach (var entity in productVariants)
             {
@@ -506,21 +514,11 @@
 
                     if (!string.IsNullOrEmpty(sqlStatement))
                     {
-
                         Database.Execute(sqlStatement, parms.ToArray());
+                        sqlStatement = string.Empty;
                     }
                 }
 
-                //split into batches of 100
-                if (++variantIndex >= 100)
-                {
-                    if (!string.IsNullOrEmpty(sqlStatement))
-                    {
-                        Database.Execute(sqlStatement, parms.ToArray());
-                    }
-                    variantIndex = 0;
-                    sqlStatement = string.Empty;
-                }
             }
 
 
